@@ -1,0 +1,24 @@
+# ==========================================================================
+# CRE WORKFLOW SETTINGS
+# ==========================================================================
+# Target names must match the ones in ../project.yaml.
+# `staging-settings` is the default target (set via CRE_TARGET in .env), so
+# `cre workflow simulate my-workflow --broadcast` needs no --target flag.
+
+# ==========================================================================
+staging-settings:
+  user-workflow:
+    workflow-name: "price-snapshot-staging"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.staging.json"
+    secrets-path: ""
+
+# ==========================================================================
+production-settings:
+  user-workflow:
+    workflow-name: "price-snapshot-production"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.production.json"
+    secrets-path: ""

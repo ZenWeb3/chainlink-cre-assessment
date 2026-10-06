@@ -1,0 +1,21 @@
+# ==========================================================================
+# CRE PROJECT SETTINGS
+# ==========================================================================
+# Target names must match the ones in my-workflow/workflow.yaml.
+# The active target comes from --target, or from CRE_TARGET in .env.
+# .env.example sets CRE_TARGET=staging-settings so that
+#   cre workflow simulate my-workflow --broadcast
+# works without passing --target.
+
+# ==========================================================================
+staging-settings:
+  rpcs:
+    - chain-name: ethereum-testnet-sepolia
+      # Override with your own endpoint by setting ETHEREUM_SEPOLIA_RPC_URL.
+      url: ${ETHEREUM_SEPOLIA_RPC_URL}
+
+# ==========================================================================
+production-settings:
+  rpcs:
+    - chain-name: ethereum-testnet-sepolia
+      url: ${ETHEREUM_SEPOLIA_RPC_URL}
