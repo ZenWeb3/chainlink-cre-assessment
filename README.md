@@ -38,6 +38,7 @@ HTTP POST {"token":"ETH"}
 | `PriceSnapshot` | [`0x7593CAF3DabFB04BD0116Be2e191736aeAC08DC5`](https://sepolia.etherscan.io/address/0x7593CAF3DabFB04BD0116Be2e191736aeAC08DC5) |
 | Deploy tx | [`0x523b6622…64b1f1`](https://sepolia.etherscan.io/tx/0x523b66224360396a5bdfdaa2bf1bb0c657cccc6beff06b6671341b9c8864b1f1) |
 | Trusted forwarder | `0x15fC6ae953E024d975e77382eEeC56A9101f9F88` (Sepolia `MockKeystoneForwarder`, used by `cre workflow simulate --broadcast`) |
+| First snapshot delivered | [`0x240a8703…05b32a`](https://sepolia.etherscan.io/tx/0x240a8703a6a7a15570f26e8b7f816ec411ff7d1d7e54553359c8eb584205b32a) — `getSnapshot("ETH")` returns `("ETH", 250782942174, 11906385, 1791898224)` |
 
 This address is already set as `consumerAddress` in
 `my-workflow/config.staging.json`, so the workflow runs against it as committed.
@@ -194,37 +195,46 @@ cre workflow simulate my-workflow --broadcast \
 Drop `--broadcast` for a dry run: everything executes, but the write is not sent
 and the transaction hash comes back as zeroes.
 
-### Expected output
+### Output of an actual run
 
-Shape of a successful run (feed values are real Sepolia readings; the
-transaction hash varies per run):
-
+Verbatim transcript from `cre workflow simulate my-workflow --broadcast`
+(2026-10-13):
 
 ```
-Workflow compiled
-[SIMULATION] Simulator Initialized
-[SIMULATION] Running trigger trigger=http-trigger@1.0.0-alpha
-[USER LOG] Snapshot requested for ETH via Data Feed 0x694AA1769357215DE4FAC081bf1f309aDC325306
-[USER LOG] ETH / USD: answer=269574660667 decimals=8 (2695.74660667) updatedAt=1791312240 roundId=18446744073709588213
-[USER LOG] AnswerUpdated round=36597 found in block 11857693 (searched 11857393..11857693, 7 logs)
-[USER LOG] writeReport: txStatus=1 receiverStatus=1 txHash=0x…
-[USER LOG] Snapshot stored. https://sepolia.etherscan.io/tx/0x…
+✓ Workflow compiled
+✓ Simulation limits enabled
+  Binary hash: d3273e338fa57539e6f97a61a48bbfc684c5f2915da79310f5376d8fc1748f81
+✓ Parsed JSON input successfully
+✓ Created HTTP trigger payload with 1 fields
+2026-10-13T15:18:32Z [SIMULATION] Simulator Initialized
 
-Workflow Simulation Result:
- {
-  "token": "ETH",
-  "feed": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
-  "description": "ETH / USD",
+2026-10-13T15:18:32Z [SIMULATION] Running trigger trigger=http-trigger@1.0.0-alpha
+2026-10-13T15:18:33Z [USER LOG] Snapshot requested for ETH via Data Feed 0x694AA1769357215DE4FAC081bf1f309aDC325306
+2026-10-13T15:18:34Z [USER LOG] ETH / USD: answer=250782942174 decimals=8 (2507.82942174) updatedAt=1791898224 roundId=18446744073709588381
+2026-10-13T15:18:34Z [USER LOG] AnswerUpdated round=36765 found in block 11906385 (searched 11906085..11906532, 1 logs)
+2026-10-13T15:18:49Z [USER LOG] writeReport: txStatus=2 receiverStatus=0 txHash=0x240a8703a6a7a15570f26e8b7f816ec411ff7d1d7e54553359c8eb584205b32a
+2026-10-13T15:18:49Z [USER LOG] Snapshot stored. https://sepolia.etherscan.io/tx/0x240a8703a6a7a15570f26e8b7f816ec411ff7d1d7e54553359c8eb584205b32a
+
+✓ Workflow Simulation Result:
+{
+  "blockNumber": "11906385",
+  "consumer": "0x7593CAF3DabFB04BD0116Be2e191736aeAC08DC5",
   "decimals": 8,
-  "price": "269574660667",
-  "priceFormatted": "2695.74660667",
-  "blockNumber": "11857693",
-  "timestamp": "1791312240",
-  "roundId": "18446744073709588213",
-  "consumer": "0x…",
-  "txHash": "0x…"
+  "description": "ETH / USD",
+  "feed": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+  "price": "250782942174",
+  "priceFormatted": "2507.82942174",
+  "roundId": "18446744073709588381",
+  "timestamp": "1791898224",
+  "token": "ETH",
+  "txHash": "0x240a8703a6a7a15570f26e8b7f816ec411ff7d1d7e54553359c8eb584205b32a"
 }
 ```
+
+`txStatus=2` is `TX_STATUS_SUCCESS` and `receiverStatus=0` is
+`RECEIVER_CONTRACT_EXECUTION_STATUS_SUCCESS` — in these enums the success value
+is not the one you might guess, so the workflow compares against the SDK
+constants rather than truthiness.
 
 ### Verify on-chain
 
@@ -237,6 +247,18 @@ cast call "$CONSUMER" "getSnapshot(string)((string,uint256,uint256,uint256))" "E
 
 cast call "$CONSUMER" "snapshotCount()(uint256)" --rpc-url "$ETHEREUM_SEPOLIA_RPC_URL"
 ```
+
+After the run above:
+
+```
+("ETH", 250782942174, 11906385, 1791898224)
+1
+```
+
+The stored `blockNumber` 11906385 is the block of the `AnswerUpdated` log for
+round 36765, independently confirmed with `cast` in the section below, and the
+stored `price` equals the answer that same log carries. The delivery transaction
+is [`0x240a8703…05b32a`](https://sepolia.etherscan.io/tx/0x240a8703a6a7a15570f26e8b7f816ec411ff7d1d7e54553359c8eb584205b32a).
 
 The transaction's `to` address is the **forwarder**, not `PriceSnapshot` — the
 workflow submits a signed report to the forwarder, which verifies it and then
@@ -477,11 +499,24 @@ commented example, and `workflow.yaml` leaves `secrets-path` blank.
   directly instead of `cre generate-bindings`, so the repo builds from a clean
   clone with no code-generation step. The trade-off is explicit encode/decode
   calls in `workflow.ts`.
-- **Sepolia gas pricing differs from Foundry's local EVM.** Contract creation
-  there cost ~7x the local estimate (see the deploy section). The workflow's own
-  `gasLimit` (600 000, in the workflow config) covers the forwarder's `onReport`
-  call, which is a far smaller transaction than the deployment — raise it if a
-  write reverts with an out-of-gas receipt.
+- **Sepolia gas pricing differs sharply from Foundry's local EVM**, and it
+  affects both transactions in this project:
+
+  | Operation | Local (Foundry) | Sepolia (measured) | Ratio |
+  | --- | --- | --- | --- |
+  | `PriceSnapshot` deployment | 1 250 412 | 9 465 772 | 7.6x |
+  | `onReport` delivery | 282 605 | 1 369 018 | 4.8x |
+
+  `gasLimit` in the workflow config is therefore **3 000 000**, not the 600 000 a
+  local measurement would suggest — at 600 000 the forwarder transaction succeeds
+  while `onReport` reverts out of gas, so the snapshot silently never lands.
+  Check the real cost before changing it:
+
+  ```bash
+  cast estimate --rpc-url "$ETHEREUM_SEPOLIA_RPC_URL" \
+    --from 0x15fC6ae953E024d975e77382eEeC56A9101f9F88 "$CONSUMER" \
+    "onReport(bytes,bytes)" "$METADATA" "$REPORT"
+  ```
 - **The log search depends on RPC range limits.** `maxLookbackBlocks` defaults to
   45 000 to stay under the 50 000-block cap of the public Sepolia endpoint in
   `.env.example`. Lower it for stricter providers.

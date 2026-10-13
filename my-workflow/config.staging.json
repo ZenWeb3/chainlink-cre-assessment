@@ -2,7 +2,7 @@
   "chainName": "ethereum-testnet-sepolia",
   "isTestnet": true,
   "consumerAddress": "0x7593CAF3DabFB04BD0116Be2e191736aeAC08DC5",
-  "gasLimit": "600000",
+  "gasLimit": "3000000",
   "maxFeedAgeSeconds": 7200,
   "avgBlockTimeSeconds": 12,
   "lookbackMarginBlocks": 300,
