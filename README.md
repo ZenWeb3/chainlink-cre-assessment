@@ -38,7 +38,8 @@ HTTP POST {"token":"ETH"}
 | `PriceSnapshot` | [`0x7593CAF3DabFB04BD0116Be2e191736aeAC08DC5`](https://sepolia.etherscan.io/address/0x7593CAF3DabFB04BD0116Be2e191736aeAC08DC5) |
 | Deploy tx | [`0x523b6622…64b1f1`](https://sepolia.etherscan.io/tx/0x523b66224360396a5bdfdaa2bf1bb0c657cccc6beff06b6671341b9c8864b1f1) |
 | Trusted forwarder | `0x15fC6ae953E024d975e77382eEeC56A9101f9F88` (Sepolia `MockKeystoneForwarder`, used by `cre workflow simulate --broadcast`) |
-| First snapshot delivered | [`0x240a8703…05b32a`](https://sepolia.etherscan.io/tx/0x240a8703a6a7a15570f26e8b7f816ec411ff7d1d7e54553359c8eb584205b32a) — `getSnapshot("ETH")` returns `("ETH", 250782942174, 11906385, 1791898224)` |
+| Snapshot: ETH | [`0x240a8703…05b32a`](https://sepolia.etherscan.io/tx/0x240a8703a6a7a15570f26e8b7f816ec411ff7d1d7e54553359c8eb584205b32a) — `("ETH", 250782942174, 11906385, 1791898224)` |
+| Snapshot: BTC | [`0xa0dc09cd…f39726`](https://sepolia.etherscan.io/tx/0xa0dc09cd42f464d78352877cedde9b590b844b07803e45ec60f4dd5bc4f39726) — `("BTC", 8312271000000, 11906276, 1791896916)` |
 
 This address is already set as `consumerAddress` in
 `my-workflow/config.staging.json`, so the workflow runs against it as committed.
@@ -213,7 +214,7 @@ Verbatim transcript from `cre workflow simulate my-workflow --broadcast`
 2026-10-13T15:18:34Z [USER LOG] ETH / USD: answer=250782942174 decimals=8 (2507.82942174) updatedAt=1791898224 roundId=18446744073709588381
 2026-10-13T15:18:34Z [USER LOG] AnswerUpdated round=36765 found in block 11906385 (searched 11906085..11906532, 1 logs)
 2026-10-13T15:18:49Z [USER LOG] writeReport: txStatus=2 receiverStatus=0 txHash=0x240a8703a6a7a15570f26e8b7f816ec411ff7d1d7e54553359c8eb584205b32a
-2026-10-13T15:18:49Z [USER LOG] Snapshot stored. https://sepolia.etherscan.io/tx/0x240a8703a6a7a15570f26e8b7f816ec411ff7d1d7e54553359c8eb584205b32a
+2026-10-13T15:18:49Z [USER LOG] Report delivered. https://sepolia.etherscan.io/tx/0x240a8703a6a7a15570f26e8b7f816ec411ff7d1d7e54553359c8eb584205b32a
 
 ✓ Workflow Simulation Result:
 {
@@ -235,6 +236,17 @@ Verbatim transcript from `cre workflow simulate my-workflow --broadcast`
 `RECEIVER_CONTRACT_EXECUTION_STATUS_SUCCESS` — in these enums the success value
 is not the one you might guess, so the workflow compares against the SDK
 constants rather than truthiness.
+
+> **The MockKeystoneForwarder does not report receiver reverts.** Running the
+> same token twice inside one feed round is correctly rejected on-chain by
+> `StaleSnapshot`, but the mock still returns `receiverStatus=0` (SUCCESS). A
+> replay observed here used 158 326 gas instead of 1 369 018, emitted no
+> `SnapshotRecorded` event, and left `snapshotCount` unchanged — yet the write
+> reported success. So in simulation a successful write is **not** proof of a
+> state change; confirm with `getSnapshot` below. The workflow still checks
+> `receiverContractExecutionStatus`, which is meaningful against the production
+> `KeystoneForwarder`, and its log says "Report delivered" rather than
+> "Snapshot stored" for this reason.
 
 ### Verify on-chain
 

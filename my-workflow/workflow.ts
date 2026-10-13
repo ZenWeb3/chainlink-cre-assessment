@@ -14,6 +14,7 @@ import {
 	type HTTPPayload,
 	type Runtime,
 } from '@chainlink/cre-sdk'
+import { EVM_PB } from '@chainlink/cre-sdk/pb'
 import {
 	decodeFunctionResult,
 	encodeAbiParameters,
@@ -356,6 +357,9 @@ export const writeSnapshot = (
 			`receiverStatus=${writeResult.receiverContractExecutionStatus} txHash=${txHash}`,
 	)
 
+	// The two statuses are independent: the forwarder transaction can succeed
+	// while the consumer's onReport reverts inside it, which would otherwise look
+	// like a successful run that stored nothing.
 	if (writeResult.txStatus !== TxStatus.SUCCESS) {
 		throw new Error(
 			`Report delivery failed with txStatus ${writeResult.txStatus}: ` +
@@ -363,7 +367,24 @@ export const writeSnapshot = (
 		)
 	}
 
-	runtime.log(`Snapshot stored. https://sepolia.etherscan.io/tx/${txHash}`)
+	if (
+		writeResult.receiverContractExecutionStatus ===
+		EVM_PB.ReceiverContractExecutionStatus.REVERTED
+	) {
+		throw new Error(
+			`The forwarder transaction succeeded but ${config.consumerAddress}.onReport reverted, ` +
+				`so no snapshot was stored (tx ${txHash}). Most likely either a StaleSnapshot — the ` +
+				`feed is still on round ${record.blockNumber}, already recorded for ${record.token} — ` +
+				`or gasLimit (${config.gasLimit}) is too low for onReport on this chain.`,
+		)
+	}
+
+	// Deliberately not claiming the snapshot was stored: under the
+	// MockKeystoneForwarder used by `cre workflow simulate`,
+	// receiverContractExecutionStatus comes back SUCCESS even when onReport
+	// reverts, so a successful write here is not proof of a state change.
+	// Confirm with getSnapshot() — see the README.
+	runtime.log(`Report delivered. https://sepolia.etherscan.io/tx/${txHash}`)
 	return txHash
 }
 
