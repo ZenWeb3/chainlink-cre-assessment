@@ -544,6 +544,13 @@ commented example, and `workflow.yaml` leaves `secrets-path` blank.
 
 ---
 
+## Author
+
+Submitted for the Chainlink CRE New Developer Experts application.
+
+- X / Twitter: [@zenonchain](https://x.com/zenonchain)
+- Telegram: [@codewithzen](https://t.me/codewithzen)
+
 ## References
 
 - [CRE documentation](https://docs.chain.link/cre)
