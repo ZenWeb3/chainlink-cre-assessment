@@ -35,11 +35,12 @@ HTTP POST {"token":"ETH"}
 | Item | Value |
 | --- | --- |
 | Network | Ethereum Sepolia (`ethereum-testnet-sepolia`, chain id 11155111) |
-| `PriceSnapshot` | `<FILL IN AFTER DEPLOY>` ([Etherscan](https://sepolia.etherscan.io/address/)) |
+| `PriceSnapshot` | [`0x7593CAF3DabFB04BD0116Be2e191736aeAC08DC5`](https://sepolia.etherscan.io/address/0x7593CAF3DabFB04BD0116Be2e191736aeAC08DC5) |
+| Deploy tx | [`0x523b6622…64b1f1`](https://sepolia.etherscan.io/tx/0x523b66224360396a5bdfdaa2bf1bb0c657cccc6beff06b6671341b9c8864b1f1) |
 | Trusted forwarder | `0x15fC6ae953E024d975e77382eEeC56A9101f9F88` (Sepolia `MockKeystoneForwarder`, used by `cre workflow simulate --broadcast`) |
 
-> The deploy step below prints the address. Put it here and in
-> `my-workflow/config.staging.json` → `consumerAddress`.
+This address is already set as `consumerAddress` in
+`my-workflow/config.staging.json`, so the workflow runs against it as committed.
 
 ---
 
@@ -124,26 +125,38 @@ cd contracts
 forge test                      # 30 tests, all local
 
 set -a && source ../.env && set +a
-forge script script/DeployPriceSnapshot.s.sol:DeployPriceSnapshot \
+cast send \
   --rpc-url "$ETHEREUM_SEPOLIA_RPC_URL" \
   --private-key "0x$CRE_ETH_PRIVATE_KEY" \
-  --broadcast
+  --gas-limit 15000000 \
+  --create "$(jq -r .bytecode.object out/PriceSnapshot.sol/PriceSnapshot.json)" \
+  "constructor(address)" "$FORWARDER_ADDRESS"
 ```
 
-Optionally append `--verify --etherscan-api-key "$ETHERSCAN_API_KEY"`.
+Then put the `contractAddress` from the receipt into
+**`my-workflow/config.staging.json`** → `consumerAddress`.
 
-The script prints:
+> **Why `cast send` with an explicit gas limit, and not `forge script`?**
+>
+> Sepolia has repriced contract creation well above what Foundry's `cancun`
+> target assumes. This contract costs **1.25M gas locally but ~9.47M on Sepolia**,
+> and the block gas limit there is now ~200M. `forge script` sizes the
+> transaction from its own local estimate (~1.78M) and ignores `--gas-limit`, so
+> the deployment runs out of gas and reverts with `status 0`. `eth_estimateGas`
+> on two independent Sepolia RPCs returns 9,542,064, which matches the 9,465,772
+> actually consumed. Gas is almost free there — the base fee was 17 wei — so a
+> generous limit costs nothing.
+>
+> `script/DeployPriceSnapshot.s.sol` is kept for local use and for chains where
+> Foundry's estimate is accurate (`forge script … --broadcast`).
 
-```
-PriceSnapshot deployed at: 0x…
-Trusted forwarder:         0x15fC6ae953E024d975e77382eEeC56A9101f9F88
-Owner:                     0x…
-```
+Verification is optional:
 
-Copy that address into **`my-workflow/config.staging.json`**:
-
-```json
-{ "consumerAddress": "0xYourDeployedPriceSnapshot" }
+```bash
+forge verify-contract 0xYourDeployedPriceSnapshot \
+  src/PriceSnapshot.sol:PriceSnapshot \
+  --chain sepolia --etherscan-api-key "$ETHERSCAN_API_KEY" \
+  --constructor-args "$(cast abi-encode 'f(address)' "$FORWARDER_ADDRESS")"
 ```
 
 ---
@@ -213,7 +226,7 @@ Workflow Simulation Result:
 
 ```bash
 set -a && source .env && set +a
-CONSUMER=0xYourDeployedPriceSnapshot
+CONSUMER=0x7593CAF3DabFB04BD0116Be2e191736aeAC08DC5
 
 cast call "$CONSUMER" "getSnapshot(string)((string,uint256,uint256,uint256))" "ETH" \
   --rpc-url "$ETHEREUM_SEPOLIA_RPC_URL"
@@ -427,6 +440,11 @@ commented example, and `workflow.yaml` leaves `secrets-path` blank.
   directly instead of `cre generate-bindings`, so the repo builds from a clean
   clone with no code-generation step. The trade-off is explicit encode/decode
   calls in `workflow.ts`.
+- **Sepolia gas pricing differs from Foundry's local EVM.** Contract creation
+  there cost ~7x the local estimate (see the deploy section). The workflow's own
+  `gasLimit` (600 000, in the workflow config) covers the forwarder's `onReport`
+  call, which is a far smaller transaction than the deployment — raise it if a
+  write reverts with an out-of-gas receipt.
 - **The log search depends on RPC range limits.** `maxLookbackBlocks` defaults to
   45 000 to stay under the 50 000-block cap of the public Sepolia endpoint in
   `.env.example`. Lower it for stricter providers.
