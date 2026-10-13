@@ -319,6 +319,15 @@ interface ISnapshot {
 }
 ```
 
+> **Note on the `snapshot` signature.** The brief specifies the `Record` struct
+> verbatim (matched exactly above) and requires "the `snapshot` function
+> signature", but does not give that signature. `snapshot(Record calldata)` is
+> the idiomatic CRE shape: it makes the struct the report payload, and is what
+> `cre generate-bindings` would turn into `writeReportFromSnapshot`. If a
+> different signature was intended, only `ISnapshot.sol`, the `_processReport`
+> decode, and `snapshotRecordParams` in `my-workflow/abi.ts` need to change —
+> the forwarder check, storage, and tests are unaffected.
+
 The report payload the workflow writes is exactly `abi.encode(Record)`, which
 `onReport` decodes with `abi.decode(report, (Record))`. A Foundry test
 (`test_reportEncoding_matchesWorkflowOutput`) and a Bun test pin that layout from
