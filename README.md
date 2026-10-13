@@ -196,6 +196,10 @@ and the transaction hash comes back as zeroes.
 
 ### Expected output
 
+Shape of a successful run (feed values are real Sepolia readings; the
+transaction hash varies per run):
+
+
 ```
 Workflow compiled
 [SIMULATION] Simulator Initialized
@@ -366,6 +370,39 @@ it ties the block to *this* answer. If no such log is found in the estimated
 window, the search is retried at the full cap and then fails loudly rather than
 storing a guess. The window parameters are config, not constants, so a slower
 chain or a slower feed needs no code change.
+
+### Verifying the lookup without CRE
+
+The mechanism can be checked against live Sepolia with `cast` alone, which is
+useful for confirming it independently of the CRE runtime:
+
+```bash
+RPC=https://ethereum-sepolia-rpc.publicnode.com
+FEED=0x694AA1769357215DE4FAC081bf1f309aDC325306
+AGG=$(cast call $FEED "aggregator()(address)" --rpc-url $RPC)
+FIN=$(cast block finalized --rpc-url $RPC --field number)
+
+# roundId, answer, updatedAt at the finalized block
+cast call $FEED "latestRoundData()(uint80,int256,uint256,uint256,uint80)" \
+  --block $FIN --rpc-url $RPC
+
+# the aggregator's own round id is the low 64 bits of the proxy's
+# then: the AnswerUpdated log carrying that round id
+cast logs --from-block $((FIN-320)) --to-block $FIN --address $AGG \
+  "$(cast keccak 'AnswerUpdated(int256,uint256,uint256)')" --rpc-url $RPC --json
+```
+
+A run at finalized block 11906404 produced:
+
+| Step | Value |
+| --- | --- |
+| `latestRoundData` | roundId `18446744073709588381`, answer `250782942174`, `updatedAt` 1791898224 |
+| Phase mask | phaseId `1`, aggregatorRoundId `36765` |
+| Search window | answer 228s old → 319 blocks (11906085..11906404) |
+| Matching log | round `36765`, answer `250782942174`, **block 11906385** |
+
+The log's answer equals the one `latestRoundData` returned, which is what
+confirms the block belongs to that answer rather than a neighbouring round.
 
 `timestamp` in the `Record` is the feed's `updatedAt` for the same round, not
 `block.timestamp` of the write — so a `Record` describes the feed observation,
